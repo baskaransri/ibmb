@@ -1,3 +1,8 @@
+#####
+# BASKARAN NOTE: looks a lot like python_tsp/heuristics/simulated_annealing.py
+# with different logging and an extra two functions at the bottom.
+####
+
 import itertools
 import logging
 from timeit import default_timer
@@ -6,9 +11,10 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 from python_tsp.heuristics.perturbation_schemes import neighborhood_gen
-from python_tsp.heuristics.local_search import setup
-from python_tsp.utils import compute_permutation_distance
-
+from python_tsp.utils import (
+    compute_permutation_distance,
+    setup_initial_solution,
+)
 
 # logger = logging.getLogger(__name__)
 # ch = logging.StreamHandler()
@@ -58,7 +64,7 @@ def solve_tsp_simulated_annealing(
     case studies. Springer Science & Business Media, 2006.
     """
 
-    x, fx = setup(distance_matrix, x0)
+    x, fx = setup_initial_solution(distance_matrix, x0)
     temp = _initial_temperature(distance_matrix, x, fx, perturbation_scheme)
     max_processing_time = max_processing_time or np.inf
 #     if log_file:

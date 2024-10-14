@@ -1,5 +1,5 @@
 from math import ceil
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Iterable
 
 import numpy as np
 import torch
@@ -13,11 +13,16 @@ from dataloaders.utils import get_partitions
 from .BaseLoader import BaseLoader
 
 
-def ppr_power_method(adj: SparseTensor,
-                     batch: List[Union[np.ndarray, torch.LongTensor]],
-                     topk: int,
-                     num_iter: int,
-                     alpha: float) -> List[np.ndarray]:
+from more_itertools import chunked
+
+
+def ppr_power_method(
+    adj: SparseTensor,
+    batch: List[Union[np.ndarray, torch.LongTensor]],
+    topk: int,
+    num_iter: int,
+    alpha: float,
+) -> List[np.ndarray]:
     """
     PPR power iteration.
 
@@ -29,9 +34,11 @@ def ppr_power_method(adj: SparseTensor,
     :return:
     """
     topk_neighbors = []
-    logits = torch.zeros(adj.size(0), len(batch), device=adj.device())  # each column contains a set of output nodes
+    logits = torch.zeros(
+        adj.size(0), len(batch), device=adj.device()
+    )  # each column contains a set of output nodes
     for i, tele_set in enumerate(batch):
-        logits[tele_set, i] = 1. / len(tele_set)
+        logits[tele_set, i] = 1.0 / len(tele_set)
 
     new_logits = logits.clone()
     for i in range(num_iter):
@@ -39,20 +46,69 @@ def ppr_power_method(adj: SparseTensor,
 
     inds = new_logits.argsort(0)
     nonzeros = (new_logits > 0).sum(0)
-    nonzeros = torch.minimum(nonzeros, torch.tensor([topk], dtype=torch.int64, device=adj.device()))
+    nonzeros = torch.minimum(
+        nonzeros, torch.tensor([topk], dtype=torch.int64, device=adj.device())
+    )
+    # BASKARAN: instead,  nonzeros = (new_logits > 0).sum(0).clamp(max=topk)
     for i in range(new_logits.shape[1]):
-        topk_neighbors.append(inds[-nonzeros[i]:, i].cpu().numpy())
+        topk_neighbors.append(inds[-nonzeros[i] :, i].cpu().numpy())
 
     return topk_neighbors
 
 
-def create_batchwise_out_aux_pairs(adj: SparseTensor,
-                                   partitions: List[Union[torch.LongTensor, np.ndarray]],
-                                   prime_indices: Union[torch.LongTensor, np.ndarray],
-                                   topk: int,
-                                   num_outnodeset_per_batch: int = 50,
-                                   alpha: float = 0.2,
-                                   ppr_iterations: int = 50) -> List[Tuple[np.ndarray, np.ndarray]]:
+# BASKARAN: A 'cleaner' rewrite so I understand it better
+# tbh maybe figure out how to replace this with the
+# torch_geometric.utils implementation?
+def ppr_power_method2(
+    adj: SparseTensor,
+    batch: List[Union[np.ndarray, torch.LongTensor]],
+    topk: int,
+    num_iter: int,
+    alpha: float,
+) -> List[np.ndarray]:
+    """
+    PPR power iteration.
+
+    :param adj:
+    :param batch:
+    :param topk:
+    :param num_iter:
+    :param alpha:
+    :return:
+    """
+    device = adj.device()
+    # This might not be cleaner, but it should be faster!
+    # shape is len(batch) x adj.size(0)
+    # entries for each row are 1/|S|
+    logits = torch.stack(
+        [
+            torch.zeros(adj.size(0), device=device).index_fill(0, b, 1.0 / len(b))
+            for b in batch
+        ]
+    )
+
+    new_logits = logits.clone()
+    for _ in range(num_iter):
+        # new_logits =  (alpha * logits) + (adj @ new_logits * (1 - alpha))
+        new_logits = torch.addmm(logits, adj, new_logits, alpha, 1 - alpha)
+
+    # Gets indices of biggest logits, taking at most topk
+    # while not including zeros
+    inds = new_logits.argsort(0)
+    nonzeros = (new_logits > 0).sum(0).clamp(max=topk)
+    topk_neighbors = [ind[-nzs:].cpu().numpy() for ind, nzs in zip(inds.T, nonzeros)]
+    return topk_neighbors
+
+
+def create_batchwise_out_aux_pairs(
+    adj: SparseTensor,
+    partitions: List[Union[torch.LongTensor, np.ndarray]],
+    prime_indices: Union[torch.LongTensor, np.ndarray],
+    topk: int,
+    num_outnodeset_per_batch: int = 50,
+    alpha: float = 0.2,
+    ppr_iterations: int = 50,
+) -> List[Tuple[np.ndarray, np.ndarray]]:
     """
 
     :param adj:
@@ -64,7 +120,7 @@ def create_batchwise_out_aux_pairs(adj: SparseTensor,
     :param ppr_iterations:
     :return:
     """
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     if isinstance(prime_indices, torch.Tensor):
         prime_indices = prime_indices.cpu().numpy()
 
@@ -80,13 +136,20 @@ def create_batchwise_out_aux_pairs(adj: SparseTensor,
         if isinstance(part, torch.Tensor):
             part = part.cpu().numpy()
 
-        primes_in_part, *_ = np.intersect1d(part, prime_indices, assume_unique=True, return_indices=True)
+        primes_in_part, *_ = np.intersect1d(
+            part, prime_indices, assume_unique=True, return_indices=True
+        )
         if len(primes_in_part):  # There ARE output nodes in this partition
             cur_output_nodes.append(primes_in_part)
 
         # accumulate enough output nodes for a batch, to make good use of GPU memory
-        if len(cur_output_nodes) >= num_outnodeset_per_batch or n == len(partitions) - 1:
-            topk_neighbors = ppr_power_method(adj, cur_output_nodes, topk, ppr_iterations, alpha)
+        if (
+            len(cur_output_nodes) >= num_outnodeset_per_batch
+            or n == len(partitions) - 1
+        ):
+            topk_neighbors = ppr_power_method(
+                adj, cur_output_nodes, topk, ppr_iterations, alpha
+            )
             for i in range(len(cur_output_nodes)):
                 # force output nodes to be aux nodes
                 auxiliary_nodes = np.union1d(cur_output_nodes[i], topk_neighbors[i])
@@ -99,23 +162,83 @@ def create_batchwise_out_aux_pairs(adj: SparseTensor,
     return loader
 
 
+# BASKARAN: Again, cleaned up for my own understanding
+# It looks nicer, but is untested
+def create_batchwise_out_aux_pairs2(
+    adj: SparseTensor,
+    partitions: List[Union[torch.LongTensor, np.ndarray]],
+    prime_indices: Union[torch.LongTensor, np.ndarray],
+    topk: int,
+    num_outnodeset_per_batch: int = 50,
+    alpha: float = 0.2,
+    ppr_iterations: int = 50,
+) -> List[Tuple[np.ndarray, np.ndarray]]:
+    """
+
+    :param adj:
+    :param partitions:
+    :param prime_indices:
+    :param topk:
+    :param num_outnodeset_per_batch:
+    :param alpha:
+    :param ppr_iterations:
+    :return:
+    """
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    if isinstance(prime_indices, torch.Tensor):
+        prime_indices = prime_indices.cpu().numpy()
+
+    def primes_intersect(part):
+        if isinstance(part, torch.Tensor):
+            part = part.cpu().numpy()
+        return np.intersect1d(part, prime_indices, assume_unique=True)
+
+    pbar = tqdm(partitions)
+    pbar.set_description("Processing topic-sensitive PPR batches")
+    # We use iterators/generators, so these all should be lazy
+    primes_with_empties = (primes_intersect(p) for p in pbar)
+    # filter(len,lss) removes empty sublists from a generator of lists
+    primes_in_part = filter(len, primes_with_empties)
+    # Process these in chunks of at most size num_outnodeset_per_batch:
+    # Specifically we're chunking for topk_neighbors calculation
+    adj = adj.to(device)
+    loader = []
+    for cur_output_nodes in chunked(primes_in_part, num_outnodeset_per_batch):
+        # Note that cur_output_nodes is a list of numpy arrays
+        topk_neighbors = ppr_power_method(
+            adj, cur_output_nodes, topk, ppr_iterations, alpha
+        )
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        # concat to loader
+        loader += [
+            (c, np.union1d(c, t))  # (Current nodes, Auxiliary nodes)
+            for c, t in zip(cur_output_nodes, topk_neighbors)
+        ]
+
+    return loader
+
+
 class IBMBBatchLoader(BaseLoader):
     """
     Batch-wise IBMB dataloader from paper Influence-Based Mini-Batching for Graph Neural Networks
     """
 
-    def __init__(self, graph: Data,
-                 batch_order: str,
-                 num_partitions: int,
-                 output_indices: torch.LongTensor,
-                 return_edge_index_type: str,
-                 batch_expand_ratio: Optional[float] = 1.,
-                 metis_output_weight: Optional[float] = None,
-                 num_outnodeset_per_batch: Optional[int] = 50,
-                 alpha: float = 0.2,
-                 approximate_ppr_iterations: int = 50,
-                 sampler: Sampler = None,
-                 **kwargs):
+    def __init__(
+        self,
+        graph: Data,
+        batch_order: str,
+        num_partitions: int,
+        output_indices: torch.LongTensor,
+        return_edge_index_type: str,
+        batch_expand_ratio: Optional[float] = 1.0,
+        metis_output_weight: Optional[float] = None,
+        num_outnodeset_per_batch: Optional[int] = 50,
+        alpha: float = 0.2,
+        approximate_ppr_iterations: int = 50,
+        sampler: Sampler = None,
+        **kwargs,
+    ):
 
         self.subgraphs = []
         self.batch_wise_out_aux_pairs = []
@@ -123,12 +246,14 @@ class IBMBBatchLoader(BaseLoader):
         self.original_graph = None
         self.adj = None
 
-        assert is_undirected(graph.edge_index, num_nodes=graph.num_nodes), "Assume the graph to be undirected"
-        self.cache_data = kwargs['batch_size'] == 1
-        self._batchsize = kwargs['batch_size']
+        assert is_undirected(
+            graph.edge_index, num_nodes=graph.num_nodes
+        ), "Assume the graph to be undirected"
+        self.cache_data = kwargs["batch_size"] == 1
+        self._batchsize = kwargs["batch_size"]
         self.num_partitions = num_partitions
         self.output_indices = output_indices
-        assert return_edge_index_type in ['adj', 'edge_index']
+        assert return_edge_index_type in ["adj", "edge_index"]
         self.return_edge_index_type = return_edge_index_type
         self.batch_expand_ratio = batch_expand_ratio
         self.metis_output_weight = metis_output_weight
@@ -138,37 +263,45 @@ class IBMBBatchLoader(BaseLoader):
 
         self.create_batch_wise_loader(graph)
 
-        if len(self.batch_wise_out_aux_pairs) > 2:   # <= 2 order makes no sense
+        if len(self.batch_wise_out_aux_pairs) > 2:  # <= 2 order makes no sense
             ys = [graph.y[out].numpy() for out, _ in self.batch_wise_out_aux_pairs]
-            sampler = self.define_sampler(batch_order,
-                                          ys,
-                                          graph.y.max().item() + 1)
+            sampler = self.define_sampler(batch_order, ys, graph.y.max().item() + 1)
 
         if not self.cache_data:
             self.original_graph = graph  # need to cache the original graph
 
-        super().__init__(self.subgraphs if self.cache_data else self.batch_wise_out_aux_pairs, sampler=sampler, **kwargs)
+        super().__init__(
+            self.subgraphs if self.cache_data else self.batch_wise_out_aux_pairs,
+            sampler=sampler,
+            **kwargs,
+        )
 
     def create_batch_wise_loader(self, graph: Data):
-        adj = SparseTensor.from_edge_index(graph.edge_index, sparse_sizes=(graph.num_nodes, graph.num_nodes))
-        adj = self.normalize_adjmat(adj, normalization='rw')
+        adj = SparseTensor.from_edge_index(
+            graph.edge_index, sparse_sizes=(graph.num_nodes, graph.num_nodes)
+        )
+        adj = self.normalize_adjmat(adj, normalization="rw")
 
         # graph partitioning
-        partitions = get_partitions(adj,
-                                    self.num_partitions,
-                                    self.output_indices,
-                                    graph.num_nodes,
-                                    self.metis_output_weight)
+        partitions = get_partitions(
+            adj,
+            self.num_partitions,
+            self.output_indices,
+            graph.num_nodes,
+            self.metis_output_weight,
+        )
 
         # get output - auxiliary node pairs
         topk = ceil(self.batch_expand_ratio * graph.num_nodes / self.num_partitions)
-        batch_wise_out_aux_pairs = create_batchwise_out_aux_pairs(adj,
-                                                                  partitions,
-                                                                  self.output_indices,
-                                                                  topk,
-                                                                  self.num_outnodeset_per_batch,
-                                                                  self.alpha,
-                                                                  self.approximate_ppr_iterations)
+        batch_wise_out_aux_pairs = create_batchwise_out_aux_pairs(
+            adj,
+            partitions,
+            self.output_indices,
+            topk,
+            self.num_outnodeset_per_batch,
+            self.alpha,
+            self.approximate_ppr_iterations,
+        )
 
         self.indices_complete_check(batch_wise_out_aux_pairs, self.output_indices)
         self.batch_wise_out_aux_pairs = batch_wise_out_aux_pairs
@@ -176,17 +309,20 @@ class IBMBBatchLoader(BaseLoader):
         if self.cache_data:
             self.prepare_cache(graph, batch_wise_out_aux_pairs, adj)
         else:
-            if self.return_edge_index_type == 'adj':
+            if self.return_edge_index_type == "adj":
                 self.adj = adj
 
-    def prepare_cache(self, graph: Data,
-                      batch_wise_out_aux_pairs: List[Tuple[np.ndarray, np.ndarray]],
-                      adj: Optional[SparseTensor]):
+    def prepare_cache(
+        self,
+        graph: Data,
+        batch_wise_out_aux_pairs: List[Tuple[np.ndarray, np.ndarray]],
+        adj: Optional[SparseTensor],
+    ):
 
         pbar = tqdm(batch_wise_out_aux_pairs)
         pbar.set_description(f"Caching data with type {self.return_edge_index_type}")
 
-        if self.return_edge_index_type == 'adj':
+        if self.return_edge_index_type == "adj":
             assert adj is not None, "Trying to cache adjacency matrix, got None type."
 
         for out, aux in pbar:
@@ -195,11 +331,17 @@ class IBMBBatchLoader(BaseLoader):
             if isinstance(aux, np.ndarray):
                 aux = torch.from_numpy(aux)
 
-            subg = self.get_subgraph(aux, graph, self.return_edge_index_type, adj, output_node_mask=mask)
+            subg = self.get_subgraph(
+                aux, graph, self.return_edge_index_type, adj, output_node_mask=mask
+            )
             self.subgraphs.append(subg)
 
     def __getitem__(self, idx):
-        return self.subgraphs[idx] if self.cache_data else self.batch_wise_out_aux_pairs[idx]
+        return (
+            self.subgraphs[idx]
+            if self.cache_data
+            else self.batch_wise_out_aux_pairs[idx]
+        )
 
     def __len__(self):
         assert self.num_partitions == len(self.batch_wise_out_aux_pairs)
@@ -219,9 +361,11 @@ class IBMBBatchLoader(BaseLoader):
         mask = torch.from_numpy(np.in1d(aux, out))
         aux = torch.from_numpy(aux)
 
-        subg = self.get_subgraph(aux,
-                                 self.original_graph,
-                                 self.return_edge_index_type,
-                                 self.adj,
-                                 output_node_mask=mask)
+        subg = self.get_subgraph(
+            aux,
+            self.original_graph,
+            self.return_edge_index_type,
+            self.adj,
+            output_node_mask=mask,
+        )
         return subg

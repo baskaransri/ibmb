@@ -2,7 +2,7 @@
 name = "ibmb"
 version = "0.1.0"
 description = ""
-authors = [""]
+authors = ["Johannes Gasteigeri <j.gasteiger@in.tum.de>", "Chendi Qian <chendi.qian@log.rwth-aachen.de>"]
 readme = "readme.md"
 
 [tool.poetry.dependencies]

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ibmb"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Johannes Gasteigeri <j.gasteiger@in.tum.de>", "Chendi Qian <chendi.qian@log.rwth-aachen.de>"]
 readme = "readme.md"

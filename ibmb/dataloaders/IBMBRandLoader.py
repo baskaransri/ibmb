@@ -7,7 +7,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor
 
-from dataloaders.utils import topk_ppr_matrix
+from ibmb.dataloaders.utils import topk_ppr_matrix
 from .BaseLoader import BaseLoader
 
 

@@ -9,10 +9,10 @@ import torch
 from sklearn.metrics import f1_score
 from torch_sparse import SparseTensor
 
-from dataloaders.BaseLoader import BaseLoader
+from ibmb.dataloaders.BaseLoader import BaseLoader
 from .prefetch_generators import BackgroundGenerator
 from .train_utils import run_batch
-from data.data_utils import MyGraph
+from ibmb.data.data_utils import MyGraph
 
 
 # from torch.utils.tensorboard import SummaryWriter

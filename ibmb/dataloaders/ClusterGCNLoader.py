@@ -8,7 +8,7 @@ from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor
 from tqdm import tqdm
 
-from dataloaders.utils import get_partitions
+from ibmb.dataloaders.utils import get_partitions
 from .BaseLoader import BaseLoader
 
 

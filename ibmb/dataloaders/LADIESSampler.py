@@ -1,13 +1,13 @@
 import numpy as np
 from typing import Union, List
 from scipy.sparse import csr_matrix
-from dataloaders.BaseLoader import BaseLoader
+from ibmb.dataloaders.BaseLoader import BaseLoader
 from torch_geometric.data import Data
 import torch
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor
 from math import ceil
-from data.data_utils import MyGraph
+from ibmb.data.data_utils import MyGraph
 
 
 def ladies_sampler(batch_nodes: np.ndarray,

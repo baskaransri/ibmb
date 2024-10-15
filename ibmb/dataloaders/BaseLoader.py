@@ -8,9 +8,9 @@ from torch_geometric.data import Data
 from torch_geometric.utils import subgraph
 from torch_sparse import SparseTensor
 
-from dataloaders.MySampler import OrderedSampler, ConsecutiveSampler
-from data.data_utils import get_pair_wise_distance
-from data.modified_tsp import tsp_heuristic
+from ibmb.dataloaders.MySampler import OrderedSampler, ConsecutiveSampler
+from ibmb.data.data_utils import get_pair_wise_distance
+from ibmb.data.modified_tsp import tsp_heuristic
 
 
 class BaseLoader(torch.utils.data.DataLoader):

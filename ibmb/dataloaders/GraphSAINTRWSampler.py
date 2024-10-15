@@ -8,7 +8,7 @@ from torch_geometric.data import Data
 from torch_sparse import SparseTensor
 from tqdm import tqdm
 
-from dataloaders.BaseLoader import BaseLoader
+from ibmb.dataloaders.BaseLoader import BaseLoader
 
 
 class SaintRWTrainSampler(BaseLoader):

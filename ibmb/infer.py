@@ -8,10 +8,10 @@ import seml
 import torch
 from sacred import Experiment
 
-from dataloaders.get_loaders import get_loaders
-from data.data_preparation import load_data, GraphPreprocess
-from models.get_model import get_model
-from train.trainer import Trainer
+from ibmb.dataloaders.get_loaders import get_loaders
+from ibmb.data.data_preparation import load_data, GraphPreprocess
+from ibmb.models.get_model import get_model
+from ibmb.train.trainer import Trainer
 
 ex = Experiment()
 seml.setup_logger(ex)

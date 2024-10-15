@@ -5,15 +5,15 @@ from typing import Dict, Tuple, Union, Optional
 from torch import LongTensor
 from torch_geometric.data import Data
 
-from dataloaders.ClusterGCNLoader import ClusterGCNLoader
-from dataloaders.GraphSAINTRWSampler import SaintRWTrainSampler, SaintRWValSampler
-from dataloaders.IBMBBatchLoader import IBMBBatchLoader
-from dataloaders.IBMBNodeLoader import IBMBNodeLoader
-from dataloaders.IBMBRandLoader import IBMBRandLoader
-from dataloaders.IBMBRandfixLoader import IBMBRandfixLoader
-from dataloaders.ShaDowLoader import ShaDowLoader
-from dataloaders.LADIESSampler import LADIESSampler
-from dataloaders.NeighborSamplingLoader import NeighborSamplingLoader
+from ibmb.dataloaders.ClusterGCNLoader import ClusterGCNLoader
+from ibmb.dataloaders.GraphSAINTRWSampler import SaintRWTrainSampler, SaintRWValSampler
+from ibmb.dataloaders.IBMBBatchLoader import IBMBBatchLoader
+from ibmb.dataloaders.IBMBNodeLoader import IBMBNodeLoader
+from ibmb.dataloaders.IBMBRandLoader import IBMBRandLoader
+from ibmb.dataloaders.IBMBRandfixLoader import IBMBRandfixLoader
+from ibmb.dataloaders.ShaDowLoader import ShaDowLoader
+from ibmb.dataloaders.LADIESSampler import LADIESSampler
+from ibmb.dataloaders.NeighborSamplingLoader import NeighborSamplingLoader
 
 Loader = Union[
     ClusterGCNLoader,

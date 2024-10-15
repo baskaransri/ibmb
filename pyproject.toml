@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Johannes Gasteigeri <j.gasteiger@in.tum.de>", "Chendi Qian <chendi.qian@log.rwth-aachen.de>"]
 readme = "readme.md"
+packages = [{ include = "ibmb" }]
 
 [tool.poetry.dependencies]
 python = "3.11.*"
